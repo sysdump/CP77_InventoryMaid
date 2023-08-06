@@ -193,19 +193,27 @@ removeJunk.items = {
 
 function removeJunk.sellJunkType(tpe, percent)
     local ts = Game.GetTransactionSystem()
-    local itemCnt = 0
+    local ssc = Game.GetScriptableSystemsContainer()
+    local espd = ssc:Get("EquipmentSystem"):GetPlayerData(Game.GetPlayer())
+    local imgr = espd:GetInventoryManager()    
+    local itemSellPrice = -1
+    local moneyGained = 0
+    local removedItemCnt = 0
     for _, v in ipairs(removeJunk.items[tpe]) do
         local itemTDBID = TweakDBID.new(v)
         local itemID = ItemID.new(itemTDBID)
         local currentItemCount = math.floor(ts:GetItemQuantity(Game.GetPlayer(), itemID) * (percent / 100))
-        ts:RemoveItem(Game.GetPlayer(), itemID, currentItemCount)
-        itemCnt = itemCnt + currentItemCount
+        if currentItemCount > 0 then
+            ts:RemoveItem(Game.GetPlayer(), itemID, currentItemCount)
+            removedItemCnt = removedItemCnt + currentItemCount
+            itemSellPrice = imgr:GetSellPrice(Game.GetPlayer(), itemID)
+            print(itemSellPrice)
+            moneyGained = sellPrice * removedItemCnt
+        end
     end
 
-    local moneyGained = 0
-    if itemCnt > 0 then
-        moneyGained = (removeJunk.price[tpe]) * itemCnt
-        Game.AddToInventory("Items.money", moneyGained)
+    if removedItemCnt > 0 then
+        Game.AddToInventory("Items.money", tostring(moneyGained))
     end
 end
 
@@ -222,55 +230,65 @@ function removeJunk.dissasembleJunkType(tpe, percent)
 end
 
 function removeJunk.previewType(tpe, percent)
-    info = {count = 0, money = 0, afterCount = 0}
+    local info = {count = 0, money = 0, afterCount = 0}
     local ts = Game.GetTransactionSystem()
-    local itemCnt = 0
+    local ssc = Game.GetScriptableSystemsContainer()
+    local espd = ssc:Get("EquipmentSystem"):GetPlayerData(Game.GetPlayer())
+    local imgr = espd:GetInventoryManager()
+    local itemSellPrice = -1
+    local moneyGained = 0
+    local removedItemCnt = 0
     local beforeItem = 0
     for _, v in ipairs(removeJunk.items[tpe]) do
         local itemTDBID = TweakDBID.new(v)
         local itemID = ItemID.new(itemTDBID)
         beforeItem = beforeItem + ts:GetItemQuantity(Game.GetPlayer(), itemID)
         local currentItemCount = math.floor(ts:GetItemQuantity(Game.GetPlayer(), itemID) * (percent / 100))
-        itemCnt = itemCnt + currentItemCount
+        if currentItemCount > 0 then
+            removedItemCnt = removedItemCnt + currentItemCount
+            itemSellPrice = imgr:GetSellPrice(Game.GetPlayer(), itemID)
+            print(itemSellPrice)
+            moneyGained = itemSellPrice * currentItemCount
+        end
     end
 
-    local moneyGained = 0
-    if itemCnt > 0 then
-        moneyGained = (removeJunk.price[tpe]) * itemCnt
-    end
     info.count = beforeItem
     info.money = moneyGained
-    info.afterCount = beforeItem - itemCnt
+    info.afterCount = beforeItem - removedItemCnt
     return info
 end
 
 function removeJunk.preview(InventoryMaid)
-    info = {count = 0, money = 0, afterCount = 0}
-    j1 = {count = 0, money = 0, afterCount = 0}
-    j2 = {count = 0, money = 0, afterCount = 0}
-    j3 = {count = 0, money = 0, afterCount = 0}
+    print("entering removeJunk.preview")
+    local info = {count = 0, money = 0, afterCount = 0}
+    local j1 = {count = 0, money = 0, afterCount = 0}
+    local j2 = {count = 0, money = 0, afterCount = 0}
+    local j3 = {count = 0, money = 0, afterCount = 0}
+    print("preview processing junk")
     if InventoryMaid.settings.junkSettings[1].sellType then
         j1 = removeJunk.previewType("junk", InventoryMaid.settings.junkSettings[1].percent)
     else
-        x = removeJunk.previewType("junk", InventoryMaid.settings.junkSettings[1].percent)
-        j1.count = x.count
-        j1.afterCount = x.count
+        -- x = removeJunk.previewType("junk", InventoryMaid.settings.junkSettings[1].percent)
+        -- j1.count = x.count
+        -- j1.afterCount = x.count
     end
 
+    print("preview processing alcohol")
     if InventoryMaid.settings.junkSettings[2].sellType then
         j2 = removeJunk.previewType("alcohol", InventoryMaid.settings.junkSettings[2].percent)
     else
-        x = removeJunk.previewType("alcohol", InventoryMaid.settings.junkSettings[1].percent)
-        j2.count = x.count
-        j2.afterCount = x.count
+        -- x = removeJunk.previewType("alcohol", InventoryMaid.settings.junkSettings[2].percent)
+        -- j2.count = x.count
+        -- j2.afterCount = x.count
     end
 
+    print("preview processing jewellery")
     if InventoryMaid.settings.junkSettings[3].sellType then
         j3 = removeJunk.previewType("jewellery", InventoryMaid.settings.junkSettings[3].percent)
     else
-        x = removeJunk.previewType("jewellery", InventoryMaid.settings.junkSettings[1].percent)
-        j3.count = x.count
-        j3.afterCount = x.count
+        -- x = removeJunk.previewType("jewellery", InventoryMaid.settings.junkSettings[3].percent)
+        -- j3.count = x.count
+        -- j3.afterCount = x.count
     end
     info.count = j1.count + j2.count + j3.count
     info.money = j1.money + j2.money + j3.money

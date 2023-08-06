@@ -18,6 +18,18 @@ grenades.grenadesList = {["frag"] = {},
 
 
 function grenades.handleGrenadeType(InventoryMaid, action)
+    print("handleGrenadeType")
+    local sellAny = false
+    for _,t in ipairs(InventoryMaid.settings.grenadeSettings.typeOptions) do
+        if t.sellType == true then
+            sellAny = true
+            break
+        end
+    end
+    if not sellAny then
+        do return 0, 0, 0 end
+    end
+
     grenades.grenadesList = {["frag"] = {},
                         ["emp"] = {},
                         ["incendiary_grenade"] = {},
@@ -32,64 +44,65 @@ function grenades.handleGrenadeType(InventoryMaid, action)
 
     local _, items = grenades.ts:GetItemListByTag(grenades.player, "Grenade")
     
-    for _, v in ipairs(items) do -- Get all grenade stacks in the inventory and insert them into grenadesList, sorted by type, removing unwanted qualitys
-        local itemRecord = Game['gameRPGManager::GetItemRecord;ItemID'](v:GetID())
-        local statObj = v:GetStatsObjectID()
-	    local quality = grenades.ss:GetStatValue(statObj, 'Quality')
+    for _, stack in ipairs(items) do -- Get all grenade stacks in the inventory and insert them into grenadesList, sorted by type, removing unwanted qualitys
+        local itemRecord = Game['gameRPGManager::GetItemRecord;ItemID'](stack:GetID())
+        local statObj = stack:GetStatsObjectID()
+	    local quality = grenades.ss:GetStatValue(statObj, gamedataStatType.Quality)
         if ((InventoryMaid.settings.grenadeSettings.sellQualitys.common and quality == 0) or (InventoryMaid.settings.grenadeSettings.sellQualitys.uncommon and quality == 1) or (InventoryMaid.settings.grenadeSettings.sellQualitys.rare and quality == 2) or (InventoryMaid.settings.grenadeSettings.sellQualitys.epic and quality == 3)) then
-            table.insert(grenades.grenadesList[itemRecord:FriendlyName()], v) 
+            table.insert(grenades.grenadesList[itemRecord:FriendlyName()], stack) 
         end
-        itemsBefore = itemsBefore + grenades.ts:GetItemQuantity(grenades.player, v:GetID())
+        itemsBefore = itemsBefore + grenades.ts:GetItemQuantity(grenades.player, stack:GetID())
     end
     
-    for _, value in pairs(grenades.grenadesList) do -- Sort the type lists by type qualitys, to sell the grenades with lower quality first
-        table.sort(value, grenades.sortFilter)  
+    for _, nadeType in pairs(grenades.grenadesList) do -- Sort the type lists by type qualitys, to sell the grenades with lower quality first
+        table.sort(nadeType, grenades.sortFilter)  
     end
 
     itemsAfter = itemsBefore
 
-    for key, value in pairs(grenades.grenadesList) do
-        local numType = 0
+    for key, singleTypeStacks in pairs(grenades.grenadesList) do
+        local totalToProcessPerType = 0
 
-        for _, v in pairs(value) do -- Get the total number of grenades per category that shoud get sold
-            numType = numType + grenades.ts:GetItemQuantity(grenades.player, v:GetID()) * (grenades.getTypeSettings(InventoryMaid, v).filterValuePercent / 100)
+        for _, stack in pairs(singleTypeStacks) do -- Get the total number of grenades per category that shoud get sold
+            totalToProcessPerType = totalToProcessPerType + grenades.ts:GetItemQuantity(grenades.player, stack:GetID()) * (grenades.getTypeSettings(InventoryMaid, stack).filterValuePercent / 100)
         end
 
-        numType = math.floor(numType)
+        totalToProcessPerType = math.floor(totalToProcessPerType)
         
-        for _, v in pairs(value) do 
-            if grenades.getTypeSettings(InventoryMaid, v).sellType then -- Only do stuff if the type is allowed to get sold
-                local sellPrice = grenades.imgr:GetSellPrice(grenades.player, v:GetID())
-                local itemQuantity = grenades.ts:GetItemQuantity(grenades.player, v:GetID())
+        for _, stack in pairs(singleTypeStacks) do
+            local toProcessPerStack = 0
+            if grenades.getTypeSettings(InventoryMaid, stack).sellType then -- Only do stuff if the type is allowed to get sold
+                local sellPrice = grenades.imgr:GetSellPrice(grenades.player, stack:GetID())
+                local countPerStack = grenades.ts:GetItemQuantity(grenades.player, stack:GetID())
 
-                if itemQuantity > numType then
-                    itemQuantity = numType
+                if countPerStack > totalToProcessPerType then
+                    toProcessPerStack = totalToProcessPerType
                 end
 
-                if grenades.getTypeSettings(InventoryMaid, v).sellAll then
-                    itemQuantity = grenades.ts:GetItemQuantity(grenades.player, v:GetID())
+                if grenades.getTypeSettings(InventoryMaid, stack).sellAll then
+                    toProcessPerStack = countPerStack
                 end
 
                 --statObj = v:GetStatsObjectID()
                 --local currentQuality = grenades.ss:GetStatValue(statObj, 'Quality')
                 --print(key, itemQuantity, currentQuality, grenades.getTypeSettings(InventoryMaid, v).typeName, grenades.getTypeSettings(InventoryMaid, v).sellType)
-                moneyGained = moneyGained + sellPrice * itemQuantity
-                numType = numType - itemQuantity
+                moneyGained = moneyGained + sellPrice * toProcessPerStack
+                totalToProcessPerType = totalToProcessPerType - toProcessPerStack
 
                 if action == "sell" then
-                    grenades.ts:RemoveItem(grenades.player, v:GetID(), itemQuantity) 
+                    grenades.ts:RemoveItem(grenades.player, stack:GetID(), toProcessPerStack) 
                 elseif action == "disassemble" then
                     local craftingSystem = Game.GetScriptableSystemsContainer():Get(CName.new('CraftingSystem'))
-                    craftingSystem:DisassembleItem(grenades.player, v:GetID(), itemQuantity)
+                    craftingSystem:DisassembleItem(grenades.player, stack:GetID(), toProcessPerStack)
                 elseif action == "preview" then
-                    itemsAfter = itemsAfter - itemQuantity
+                    itemsAfter = itemsAfter - toProcessPerStack
                 end
             end
         end
     end
 
     if action == "sell" then
-        Game.AddToInventory("Items.money", moneyGained)
+        Game.AddToInventory("Items.money", tostring(moneyGained))
     end
 
     return moneyGained, itemsBefore, itemsAfter
@@ -110,11 +123,11 @@ function grenades.sortFilter(left, right)
     statL = left:GetStatsObjectID()
     statR = right:GetStatsObjectID()
 
-    return grenades.ss:GetStatValue(statL, 'Quality') < grenades.ss:GetStatValue(statR, 'Quality')
+    return grenades.ss:GetStatValue(statL, gamedataStatType.Quality) < grenades.ss:GetStatValue(statR, gamedataStatType.Quality)
 end
 
 function grenades.preview(InventoryMaid)
-    info = {count = 0, money = 0, afterCount = 0}
+    local info = {count = 0, money = 0, afterCount = 0}
     money, before, after = grenades.handleGrenadeType(InventoryMaid, "preview")
     info.count = before
     info.money = money
